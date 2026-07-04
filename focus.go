@@ -15,6 +15,7 @@ type FocusActivation struct {
 	Protocol  string
 	Helper    string
 	Arguments string
+	Window    uintptr
 }
 
 // FocusActivationArguments formats the URI passed to WithActivationArguments.
@@ -24,4 +25,11 @@ func FocusActivationArguments(pid int, protocols ...string) string {
 		protocol = protocols[0]
 	}
 	return fmt.Sprintf("%s:%d", protocol, pid)
+}
+
+func focusActivationArguments(pid int, hwnd uintptr, protocol string) string {
+	if hwnd == 0 {
+		return FocusActivationArguments(pid, protocol)
+	}
+	return fmt.Sprintf("%s:%d:%x", protocol, pid, hwnd)
 }

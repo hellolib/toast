@@ -126,6 +126,18 @@ This repository provides both the library API and a helper command for that
 flow. The helper is a separate executable so toast clicks do not flash a console
 window.
 
+### Target Selection
+
+`PrepareFocusActivation` resolves the target window before the toast is sent. It
+walks up from the supplied PID, finds a visible top-level window, and embeds that
+window handle in the activation URI. When the toast is clicked, the helper first
+focuses that exact window handle. If the handle is no longer valid, it falls back
+to the PID-based process-tree lookup.
+
+This avoids focusing the wrong window in shells launched from apps with multiple
+top-level windows, such as VS Code, Windows Terminal, or other Electron-based
+hosts.
+
 ### Library Usage
 
 ```go
@@ -150,7 +162,7 @@ func main() {
     _ = toast.Push("Click to focus the current terminal",
         toast.WithAppID("agent-notify"),
         toast.WithTitle("Agent Notify"),
-        toast.WithMessage(fmt.Sprintf("helper: %s", focus.Helper)),
+        toast.WithMessage(fmt.Sprintf("helper: %s\nhwnd: 0x%x", focus.Helper, focus.Window)),
         toast.WithActivationType("protocol"),
         toast.WithActivationArguments(focus.Arguments),
     )
@@ -230,6 +242,10 @@ Windows focus helpers:
 - `toast.RegisterFocusProtocol(helperPath, protocol...)`
 - `toast.PrepareFocusActivation(pid, helperCandidates...)`
 - `toast.FocusActivationArguments(pid, protocol...)`
+
+`FocusActivation.Window` is the resolved Windows `HWND` used for precise
+click-to-focus. It may be zero when no suitable window is found before sending
+the toast.
 
 JavaScript/WASM options:
 

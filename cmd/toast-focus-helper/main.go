@@ -20,7 +20,10 @@ var (
 	procProcess32Next     = kernel32.NewProc("Process32NextW")
 	procCloseHandle       = kernel32.NewProc("CloseHandle")
 	procEnumWindows       = user32.NewProc("EnumWindows")
+	procGetWindow         = user32.NewProc("GetWindow")
+	procGetWindowTextLen  = user32.NewProc("GetWindowTextLengthW")
 	procGetWindowThreadPr = user32.NewProc("GetWindowThreadProcessId")
+	procIsWindow          = user32.NewProc("IsWindow")
 	procIsWindowVisible   = user32.NewProc("IsWindowVisible")
 	procSetForegroundWnd  = user32.NewProc("SetForegroundWindow")
 	procAllowSetFG        = user32.NewProc("AllowSetForegroundWindow")
@@ -33,6 +36,7 @@ var (
 const (
 	th32csSnapProcess = 0x00000002
 	maxPath           = 260
+	gwOwner           = 4
 	swRestore         = 9
 	asfwAny           = ^uint32(0)
 )
@@ -55,9 +59,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	pid, err := parseActivationPID(os.Args[1])
+	pid, hwnd, err := parseActivation(os.Args[1])
 	if err != nil {
 		os.Exit(1)
+	}
+
+	if hwnd != 0 && isUsableWindow(hwnd) {
+		procShowWindowAsync.Call(hwnd, uintptr(swRestore))
+		setForeground(hwnd)
+		return
 	}
 
 	windowPID := findWindowPID(uint32(pid))
@@ -75,13 +85,27 @@ func main() {
 	setForeground(foundHwnd)
 }
 
-func parseActivationPID(uri string) (int, error) {
+func parseActivation(uri string) (int, uintptr, error) {
 	s := uri
 	if idx := strings.Index(s, ":"); idx >= 0 {
 		s = s[idx+1:]
 	}
 	s = strings.TrimPrefix(s, "//")
-	return strconv.Atoi(s)
+	parts := strings.SplitN(s, ":", 2)
+
+	pid, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(parts) < 2 || parts[1] == "" {
+		return pid, 0, nil
+	}
+
+	hwnd, err := strconv.ParseUint(parts[1], 16, 0)
+	if err != nil {
+		return pid, 0, nil
+	}
+	return pid, uintptr(hwnd), nil
 }
 
 func parentPID(pid uint32) uint32 {
@@ -124,8 +148,7 @@ func hasVisibleWindow(pid uint32) bool {
 		syscall.NewCallback(func(hwnd uintptr, _ uintptr) uintptr {
 			var windowPID uint32
 			procGetWindowThreadPr.Call(hwnd, uintptr(unsafe.Pointer(&windowPID)))
-			visible, _, _ := procIsWindowVisible.Call(hwnd)
-			if windowPID == pid && visible != 0 {
+			if windowPID == pid && isUsableWindow(hwnd) {
 				foundHwnd = hwnd
 				return 0
 			}
@@ -134,6 +157,23 @@ func hasVisibleWindow(pid uint32) bool {
 		0,
 	)
 	return foundHwnd != 0
+}
+
+func isUsableWindow(hwnd uintptr) bool {
+	exists, _, _ := procIsWindow.Call(hwnd)
+	if exists == 0 {
+		return false
+	}
+	visible, _, _ := procIsWindowVisible.Call(hwnd)
+	if visible == 0 {
+		return false
+	}
+	owner, _, _ := procGetWindow.Call(hwnd, gwOwner)
+	if owner != 0 {
+		return false
+	}
+	titleLen, _, _ := procGetWindowTextLen.Call(hwnd)
+	return titleLen > 0
 }
 
 func setForeground(hwnd uintptr) {
