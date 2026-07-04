@@ -14,8 +14,8 @@ build-helpers: build-helper-windows-amd64 build-helper-windows-arm64
 
 build-windows-amd64:
 	@mkdir -p $(DIST_DIR)
-	GOOS=windows GOARCH=amd64 $(GO) build -o $(DIST_DIR)/toast-focus.exe ./cmd/toast-focus
-	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="$(WINDOWS_GUI_LDFLAGS)" -o $(DIST_DIR)/toast-focus-helper.exe ./cmd/toast-focus-helper
+	GOOS=windows GOARCH=amd64 $(GO) build -o $(DIST_DIR)/toast-focus-amd64.exe ./cmd/toast-focus
+	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="$(WINDOWS_GUI_LDFLAGS)" -o $(DIST_DIR)/toast-focus-helper-amd64.exe ./cmd/toast-focus-helper
 
 build-windows-arm64:
 	@mkdir -p $(DIST_DIR)
@@ -24,7 +24,7 @@ build-windows-arm64:
 
 build-helper-windows-amd64:
 	@mkdir -p $(DIST_DIR)
-	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="$(WINDOWS_GUI_LDFLAGS)" -o $(DIST_DIR)/toast-focus-helper.exe ./cmd/toast-focus-helper
+	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="$(WINDOWS_GUI_LDFLAGS)" -o $(DIST_DIR)/toast-focus-helper-amd64.exe ./cmd/toast-focus-helper
 
 build-helper-windows-arm64:
 	@mkdir -p $(DIST_DIR)
