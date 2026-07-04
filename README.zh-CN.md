@@ -2,28 +2,26 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-English | [简体中文](README.zh-CN.md)
+[English](README.md) | 简体中文
 
-Toast is a small Go library for sending desktop notifications from native
-applications and lightweight tools. It supports macOS, Windows, and JavaScript
-WASM, with helper utilities for Windows toast click-to-focus workflows.
+Toast 是一个用于发送桌面通知的 Go 小型库，适合原生命令行工具、桌面辅助程序和轻量应用。它支持 macOS、Windows 和 JavaScript WASM，并提供 Windows 通知点击后聚焦原窗口的辅助能力。
 
-## Features
+## 功能特性
 
-- Simple `toast.Push` API with functional options
-- macOS notifications through `osascript` or Objective-C
-- Windows toast notifications through Windows Runtime APIs
-- Windows protocol activation for clickable toast actions
-- Optional Windows focus helper for bringing the originating terminal or app to front
-- JavaScript/WASM notification support for browser environments
+- 简洁的 `toast.Push` API 和函数式选项
+- macOS 支持 `osascript` 和 Objective-C 通知
+- Windows 使用 Windows Runtime Toast Notification API
+- Windows 支持通过 URL Protocol 处理通知点击
+- 可选的 Windows focus helper，用于点击通知后聚焦原终端或应用窗口
+- JavaScript/WASM 环境下支持浏览器通知
 
-## Install
+## 安装
 
 ```bash
 go get github.com/hellolib/toast
 ```
 
-## Quick Start
+## 快速开始
 
 ```go
 package main
@@ -35,7 +33,7 @@ func main() {
 }
 ```
 
-## Platform Examples
+## 平台示例
 
 ### macOS
 
@@ -53,7 +51,7 @@ func main() {
 }
 ```
 
-For Objective-C delivery:
+使用 Objective-C 方式发送：
 
 ```go
 _ = toast.Push("Task completed",
@@ -79,7 +77,7 @@ func main() {
 }
 ```
 
-To add an image:
+添加图标：
 
 ```go
 _ = toast.Push("Task completed",
@@ -112,21 +110,18 @@ func main() {
 }
 ```
 
-## Windows Click-To-Focus
+## Windows 点击聚焦
 
-Windows toast clicks are delivered through activation. For ordinary Go command
-line tools, the practical approach is:
+Windows toast 的点击行为通过 activation 触发。对普通 Go 命令行工具来说，比较稳定的方案是：
 
-1. Ship a small GUI-subsystem helper executable.
-2. Register a custom URL protocol that launches the helper.
-3. Send the toast with `WithActivationType("protocol")`.
-4. Pass the protocol URI through `WithActivationArguments`.
+1. 随应用分发一个 GUI 子系统的 helper 可执行文件。
+2. 注册一个自定义 URL Protocol，让系统在点击通知时启动 helper。
+3. 发送通知时使用 `WithActivationType("protocol")`。
+4. 通过 `WithActivationArguments` 传入协议 URI。
 
-This repository provides both the library API and a helper command for that
-flow. The helper is a separate executable so toast clicks do not flash a console
-window.
+本仓库同时提供库 API 和 helper 命令。helper 是独立可执行文件，因此点击通知时不会闪出控制台窗口。
 
-### Library Usage
+### 库用法
 
 ```go
 package main
@@ -157,63 +152,60 @@ func main() {
 }
 ```
 
-`PrepareFocusActivation` checks explicit helper candidates first. If none are
-provided or found, it looks next to the current executable for conventional
-names:
+`PrepareFocusActivation` 会优先检查传入的 helper 候选路径。如果没有传入路径，或路径不存在，它会在当前可执行文件同目录下查找这些约定名称：
 
 - `toast-focus-helper.exe`
 - `toast-focus-helper-arm64.exe`
 - `<app>-focus-helper.exe`
 - `<app>-helper.exe`
 
-### Demo Commands
+### 示例命令
 
-`cmd/toast-focus` is a runnable demo that sends a clickable toast. It expects the
-helper binary to be in the same directory.
+`cmd/toast-focus` 是一个可运行示例，用于发送可点击聚焦的通知。helper 需要和它放在同一个目录。
 
 ```bash
 make build
 ```
 
-Artifacts are written to `dist/`:
+产物会生成到 `dist/`：
 
 - `toast-focus.exe`
 - `toast-focus-helper.exe`
 - `toast-focus-arm64.exe`
 - `toast-focus-helper-arm64.exe`
 
-For applications that only need the helper binaries:
+如果上层应用只需要内置 helper：
 
 ```bash
 make build-helpers
 ```
 
-## Make Targets
+## Make 目标
 
 ```bash
-make test                 # Run Go tests
-make build                # Build all Windows demo/helper binaries
-make build-helpers        # Build only Windows focus helpers
-make build-windows-amd64  # Build Windows amd64 demo/helper
-make build-windows-arm64  # Build Windows arm64 demo/helper
-make clean                # Remove dist/
+make test                 # 运行 Go 测试
+make build                # 构建全部 Windows demo/helper 二进制
+make build-helpers        # 只构建 Windows focus helper
+make build-windows-amd64  # 构建 Windows amd64 demo/helper
+make build-windows-arm64  # 构建 Windows arm64 demo/helper
+make clean                # 删除 dist/
 ```
 
-## API Overview
+## API 概览
 
-Common options:
+通用选项：
 
 - `toast.Push(message, opts...)`
 - `toast.WithTitle(title)`
 - `toast.WithMessage(message)`
 - `toast.WithAudio(audio)`
 
-macOS options:
+macOS 选项：
 
 - `toast.WithSubtitle(subtitle)`
 - `toast.WithObjectiveC()`
 
-Windows options:
+Windows 选项：
 
 - `toast.WithAppID(appID)`
 - `toast.WithIcon(path)`
@@ -224,14 +216,14 @@ Windows options:
 - `toast.WithLongDuration()`
 - `toast.WithShortDuration()`
 
-Windows focus helpers:
+Windows 聚焦辅助：
 
 - `toast.FindFocusHelper(candidates...)`
 - `toast.RegisterFocusProtocol(helperPath, protocol...)`
 - `toast.PrepareFocusActivation(pid, helperCandidates...)`
 - `toast.FocusActivationArguments(pid, protocol...)`
 
-JavaScript/WASM options:
+JavaScript/WASM 选项：
 
 - `toast.WithIcon(url)`
 - `toast.WithImage(url)`
@@ -241,6 +233,6 @@ JavaScript/WASM options:
 - `toast.WithOnClose(fn)`
 - `toast.WithOnError(fn)`
 
-## License
+## 许可证
 
 MIT
