@@ -26,6 +26,12 @@ var (
 	focusProcGetWindowTextLen  = focusUser32.NewProc("GetWindowTextLengthW")
 	focusProcGetWindowThreadPr = focusUser32.NewProc("GetWindowThreadProcessId")
 	focusProcIsWindowVisible   = focusUser32.NewProc("IsWindowVisible")
+	focusProcGetClassNameW     = focusUser32.NewProc("GetClassNameW")
+	focusProcGetWindowTextW    = focusUser32.NewProc("GetWindowTextW")
+	focusProcGetWindowRect     = focusUser32.NewProc("GetWindowRect")
+	focusProcGetWindowLongW    = focusUser32.NewProc("GetWindowLongW")
+	focusProcIsIconic          = focusUser32.NewProc("IsIconic")
+	focusProcIsWindow          = focusUser32.NewProc("IsWindow")
 )
 
 const (
@@ -111,55 +117,124 @@ func PrepareFocusActivation(pid int, helperCandidates ...string) (FocusActivatio
 }
 
 func findFocusWindow(start uint32) uintptr {
-	for current := start; current != 0; {
-		if hwnd := visibleTopLevelWindow(current); hwnd != 0 {
-			return hwnd
-		}
-		parent := focusParentPID(current)
-		if parent == 0 || parent == current {
-			break
-		}
-		current = parent
-	}
-	return 0
+	hwnd, _, _ := SelectHostWindow(EnumerateAncestorWindows(start))
+	return hwnd
 }
 
-func focusParentPID(pid uint32) uint32 {
+type focusRect struct{ Left, Top, Right, Bottom int32 }
+
+// focusProcessTable 单次快照，返回 pid -> (ppid, exe)。
+func focusProcessTable() map[uint32]struct {
+	PPID uint32
+	Exe  string
+} {
+	table := map[uint32]struct {
+		PPID uint32
+		Exe  string
+	}{}
 	snap, _, _ := focusProcCreateToolhelp32.Call(focusTH32CSSnapProcess, 0)
 	if snap == 0 {
-		return 0
+		return table
 	}
 	defer focusProcCloseHandle.Call(snap)
 
 	entry := focusProcessEntry32{Size: uint32(unsafe.Sizeof(focusProcessEntry32{}))}
 	ok, _, _ := focusProcProcess32First.Call(snap, uintptr(unsafe.Pointer(&entry)))
 	for ok != 0 {
-		if entry.ProcessID == pid {
-			return entry.ParentProcessID
-		}
+		exe := syscall.UTF16ToString(entry.ExeFile[:])
+		table[entry.ProcessID] = struct {
+			PPID uint32
+			Exe  string
+		}{PPID: entry.ParentProcessID, Exe: exe}
 		ok, _, _ = focusProcProcess32Next.Call(snap, uintptr(unsafe.Pointer(&entry)))
 	}
-	return 0
+	return table
 }
 
-func visibleTopLevelWindow(pid uint32) uintptr {
-	var found uintptr
+func focusWindowText(hwnd uintptr) string {
+	n, _, _ := focusProcGetWindowTextLen.Call(hwnd)
+	if n == 0 {
+		return ""
+	}
+	buf := make([]uint16, n+1)
+	focusProcGetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	return syscall.UTF16ToString(buf)
+}
+
+func focusWindowClass(hwnd uintptr) string {
+	buf := make([]uint16, 256)
+	focusProcGetClassNameW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	return syscall.UTF16ToString(buf)
+}
+
+func focusWindowInfo(hwnd uintptr, ownerPID uint32) WindowInfo {
+	visible, _, _ := focusProcIsWindowVisible.Call(hwnd)
+	owner, _, _ := focusProcGetWindow.Call(hwnd, focusGWOwner)
+	iconic, _, _ := focusProcIsIconic.Call(hwnd)
+	exStyle, _, _ := focusProcGetWindowLongW.Call(hwnd, ^uintptr(19))
+	var r focusRect
+	focusProcGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&r)))
+	return WindowInfo{
+		HWND:      hwnd,
+		OwnerPID:  ownerPID,
+		Class:     focusWindowClass(hwnd),
+		Title:     focusWindowText(hwnd),
+		Visible:   visible != 0,
+		HasOwner:  owner != 0,
+		Minimized: iconic != 0,
+		ExStyle:   uint32(exStyle),
+		X:         r.Left,
+		Y:         r.Top,
+		W:         r.Right - r.Left,
+		H:         r.Bottom - r.Top,
+	}
+}
+
+func windowsForPID(pid uint32) []WindowInfo {
+	var out []WindowInfo
 	focusProcEnumWindows.Call(
 		syscall.NewCallback(func(hwnd uintptr, _ uintptr) uintptr {
 			var windowPID uint32
 			focusProcGetWindowThreadPr.Call(hwnd, uintptr(unsafe.Pointer(&windowPID)))
-			if windowPID != pid || !isUsableTopLevelWindow(hwnd) {
-				return 1
+			if windowPID == pid {
+				out = append(out, focusWindowInfo(hwnd, pid))
 			}
-			found = hwnd
-			return 0
+			return 1
 		}),
 		0,
 	)
-	return found
+	return out
 }
 
-func isUsableTopLevelWindow(hwnd uintptr) bool {
+// EnumerateAncestorWindows 从 start 沿进程树向上，逐祖先归组其全部顶层窗口。
+func EnumerateAncestorWindows(start uint32) []AncestorWindows {
+	table := focusProcessTable()
+	var chain []AncestorWindows
+	seen := map[uint32]bool{}
+	for current := start; current != 0 && !seen[current]; {
+		seen[current] = true
+		info := table[current]
+		chain = append(chain, AncestorWindows{
+			PID:     current,
+			PPID:    info.PPID,
+			Exe:     info.Exe,
+			Windows: windowsForPID(current),
+		})
+		parent := info.PPID
+		if parent == 0 || parent == current {
+			break
+		}
+		current = parent
+	}
+	return chain
+}
+
+// IsUsableWindow 校验单个 HWND（供 helper 直连路径）：存在 + 可见 + 无 owner + 有标题。
+func IsUsableWindow(hwnd uintptr) bool {
+	exists, _, _ := focusProcIsWindow.Call(hwnd)
+	if exists == 0 {
+		return false
+	}
 	visible, _, _ := focusProcIsWindowVisible.Call(hwnd)
 	if visible == 0 {
 		return false
