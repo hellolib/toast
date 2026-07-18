@@ -99,23 +99,37 @@ func RegisterFocusProtocol(helperPath string, protocols ...string) error {
 	return nil
 }
 
-// PrepareFocusActivation finds the helper, registers the default focus
-// protocol, and returns the URI that should be passed to WithActivationArguments.
-func PrepareFocusActivation(pid int, helperCandidates ...string) (FocusActivation, error) {
+// PrepareFocusActivationVerbose 找 helper、注册协议、解析宿主窗口，并返回完整诊断。
+// logPath 非空时嵌入激活 URI（helper 点击时据此写日志）。
+func PrepareFocusActivationVerbose(pid int, logPath string, helperCandidates ...string) (FocusActivation, FocusDiag, error) {
 	helper, err := FindFocusHelper(helperCandidates...)
 	if err != nil {
-		return FocusActivation{}, err
+		return FocusActivation{}, FocusDiag{StartPID: uint32(pid)}, err
 	}
 	if err := RegisterFocusProtocol(helper); err != nil {
-		return FocusActivation{}, err
+		return FocusActivation{}, FocusDiag{StartPID: uint32(pid)}, err
 	}
-	hwnd := findFocusWindow(uint32(pid))
+	chain := EnumerateAncestorWindows(uint32(pid))
+	hwnd, selPID, reason := SelectHostWindow(chain)
+	diag := FocusDiag{
+		StartPID:     uint32(pid),
+		Chain:        chain,
+		SelectedHWND: hwnd,
+		SelectedPID:  selPID,
+		Reason:       reason,
+	}
 	return FocusActivation{
 		Protocol:  DefaultFocusProtocol,
 		Helper:    helper,
-		Arguments: focusActivationArguments(pid, hwnd, DefaultFocusProtocol),
+		Arguments: buildFocusArguments(pid, hwnd, logPath, DefaultFocusProtocol),
 		Window:    hwnd,
-	}, nil
+	}, diag, nil
+}
+
+// PrepareFocusActivation 保留原签名，委托 Verbose（无 logPath、丢弃诊断）。
+func PrepareFocusActivation(pid int, helperCandidates ...string) (FocusActivation, error) {
+	act, _, err := PrepareFocusActivationVerbose(pid, "", helperCandidates...)
+	return act, err
 }
 
 func findFocusWindow(start uint32) uintptr {
