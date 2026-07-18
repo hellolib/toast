@@ -32,11 +32,6 @@ func FocusActivationArguments(pid int, protocols ...string) string {
 	return fmt.Sprintf("%s:%d", protocol, pid)
 }
 
-// focusActivationArguments 保留原签名，委托 buildFocusArguments（logPath 空）。
-func focusActivationArguments(pid int, hwnd uintptr, protocol string) string {
-	return buildFocusArguments(pid, hwnd, "", protocol)
-}
-
 // buildFocusArguments 拼装 "protocol:pid[:hwndhex[:b64logpath]]"。
 // logPath 非空时即便 hwnd==0 也保留 hwnd 槽位（填 0），确保字段位置对齐。
 func buildFocusArguments(pid int, hwnd uintptr, logPath, protocol string) string {

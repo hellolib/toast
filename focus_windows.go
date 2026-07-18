@@ -132,11 +132,6 @@ func PrepareFocusActivation(pid int, helperCandidates ...string) (FocusActivatio
 	return act, err
 }
 
-func findFocusWindow(start uint32) uintptr {
-	hwnd, _, _ := SelectHostWindow(EnumerateAncestorWindows(start))
-	return hwnd
-}
-
 type focusRect struct{ Left, Top, Right, Bottom int32 }
 
 // focusProcessTable 单次快照，返回 pid -> (ppid, exe)。

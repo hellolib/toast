@@ -10,12 +10,12 @@ func TestSelectHostWindow_CurrentSemantics(t *testing.T) {
 	chain := []AncestorWindows{
 		{PID: 100, Exe: "pwsh.exe", Windows: nil},
 		{PID: 101, Exe: "OpenConsole.exe", Windows: []WindowInfo{
-			{HWND: 0xAAA, Title: "", Visible: true, HasOwner: false},               // 无标题→不可用
-			{HWND: 0xBBB, Title: "dlg", Visible: true, HasOwner: true},             // 有 owner→不可用
-			{HWND: 0xCCC, Title: "hidden", Visible: false, HasOwner: false},        // 不可见→不可用
+			{HWND: 0xAAA, Title: "", Visible: true, HasOwner: false},        // 无标题→不可用
+			{HWND: 0xBBB, Title: "dlg", Visible: true, HasOwner: true},      // 有 owner→不可用
+			{HWND: 0xCCC, Title: "hidden", Visible: false, HasOwner: false}, // 不可见→不可用
 		}},
 		{PID: 102, Exe: "WindowsTerminal.exe", Windows: []WindowInfo{
-			{HWND: 0xD00, Title: "pwsh", Visible: true, HasOwner: false},           // ✓ 命中
+			{HWND: 0xD00, Title: "pwsh", Visible: true, HasOwner: false}, // ✓ 命中
 			{HWND: 0xD01, Title: "other", Visible: true, HasOwner: false},
 		}},
 	}

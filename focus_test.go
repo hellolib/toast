@@ -68,4 +68,3 @@ func TestParseFocusActivation(t *testing.T) {
 		t.Fatalf("bad b64 should degrade to empty logpath, got (%q,%v)", l, err)
 	}
 }
-

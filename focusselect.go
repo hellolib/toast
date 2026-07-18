@@ -8,14 +8,14 @@ import (
 // WindowInfo 是一个顶层窗口的朴素快照（除数值 HWND 外不含任何 Win32 句柄）。
 // 中立类型，供 send 侧、helper、探针共用与单测。
 type WindowInfo struct {
-	HWND      uintptr
-	OwnerPID  uint32
-	Class     string
-	Title     string
-	Visible   bool
-	HasOwner  bool
-	Minimized bool
-	ExStyle   uint32
+	HWND       uintptr
+	OwnerPID   uint32
+	Class      string
+	Title      string
+	Visible    bool
+	HasOwner   bool
+	Minimized  bool
+	ExStyle    uint32
 	X, Y, W, H int32
 }
 
