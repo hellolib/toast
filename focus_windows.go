@@ -38,6 +38,8 @@ const (
 	focusTH32CSSnapProcess = 0x00000002
 	focusMaxPath           = 260
 	focusGWOwner           = 4
+	// focusGWLExStyle is GWL_EXSTYLE (-20) expressed as a uintptr (two's complement).
+	focusGWLExStyle = ^uintptr(19)
 )
 
 type focusProcessEntry32 struct {
@@ -171,7 +173,7 @@ func focusWindowInfo(hwnd uintptr, ownerPID uint32) WindowInfo {
 	visible, _, _ := focusProcIsWindowVisible.Call(hwnd)
 	owner, _, _ := focusProcGetWindow.Call(hwnd, focusGWOwner)
 	iconic, _, _ := focusProcIsIconic.Call(hwnd)
-	exStyle, _, _ := focusProcGetWindowLongW.Call(hwnd, ^uintptr(19))
+	exStyle, _, _ := focusProcGetWindowLongW.Call(hwnd, focusGWLExStyle)
 	var r focusRect
 	focusProcGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&r)))
 	return WindowInfo{
