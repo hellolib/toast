@@ -15,10 +15,16 @@ import (
 //go:embed assets/toast-icon.png
 var embeddedToastIcon []byte
 
-// defaultToastIconPath is a stable temp path owned by this library (not the
-// consumer's private dir) where the default icon is materialized.
+// defaultToastIconPath is a stable per-user path owned by this library (not the
+// consumer's private dir). It lives under the user cache dir (%LOCALAPPDATA% on
+// Windows) rather than TempDir so a registered AppUserModelID IconUri keeps
+// resolving after temp cleanups.
 func defaultToastIconPath() string {
-	return filepath.Join(os.TempDir(), "hellolib-toast", "toast-icon.png")
+	base, err := os.UserCacheDir()
+	if err != nil {
+		base = os.TempDir()
+	}
+	return filepath.Join(base, "hellolib-toast", "toast-icon.png")
 }
 
 // writeIconIfAbsent writes data to path only when the file does not already

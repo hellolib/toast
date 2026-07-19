@@ -33,7 +33,11 @@ func TestWriteIconIfAbsent(t *testing.T) {
 }
 
 func TestMaterializeDefaultIcon(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir()) // redirect os.TempDir() on darwin/linux
+	// Redirect os.UserCacheDir(): $HOME/Library/Caches on darwin, $XDG_CACHE_HOME
+	// (or $HOME/.cache) on linux.
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CACHE_HOME", tmp)
 	p := materializeDefaultIcon()
 	if p == "" || filepath.Base(p) != "toast-icon.png" {
 		t.Fatalf("bad path %q", p)

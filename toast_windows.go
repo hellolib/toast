@@ -177,11 +177,22 @@ func newNotification(message string, opts ...NotificationOption) *notification {
 }
 
 func (n *notification) push() error {
+	appID := n.AppID
+	if appID == "" {
+		appID = "GO APP"
+	}
+	// Register the AppUserModelID (once) with the default icon so the toast's
+	// attribution row (the top line, next to the app name) shows the logo.
+	if iconPath := materializeDefaultIcon(); iconPath != "" {
+		ensureAppIDRegistered(appID, appID, iconPath)
+	}
+
+	// appLogoOverride — the large image left of the text — is emitted ONLY when
+	// the caller explicitly supplies WithIcon. The default logo lives in the
+	// attribution row (via the registered AppUserModelID above), not here.
 	iconURI := ""
 	if n.Icon != "" {
 		iconURI = fileURI(n.Icon)
-	} else if p := materializeDefaultIcon(); p != "" {
-		iconURI = fileURI(p)
 	}
 
 	xml := buildToastXML(toastContent{
@@ -196,10 +207,6 @@ func (n *notification) push() error {
 		Actions:             n.Actions,
 	})
 
-	appID := n.AppID
-	if appID == "" {
-		appID = "GO APP"
-	}
 	err := pushToastXMLBase64(appID, xml)
 	if n._tmpIconFilename != "" {
 		_ = os.Remove(n._tmpIconFilename)
