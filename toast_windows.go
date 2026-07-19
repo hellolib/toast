@@ -3,19 +3,15 @@
 package toast
 
 import (
-	"bytes"
+	"encoding/base64"
 	"fmt"
 	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
-	"sync"
 	"syscall"
-	"text/template"
 	"time"
-	"unsafe"
 )
 
 // WithAppID
@@ -91,7 +87,7 @@ func WithProtocolAction(label string, arguments ...string) NotificationOption {
 		}
 		n.Actions = append(n.Actions, Action{
 			Type:      "protocol",
-			Label:     escapeNotificationString(label),
+			Label:     label,
 			Arguments: arguments[0],
 		})
 	}
@@ -177,100 +173,81 @@ func newNotification(message string, opts ...NotificationOption) *notification {
 	for _, fn := range opts {
 		fn(n)
 	}
-	n.AppID = escapeNotificationString(n.AppID)
-	n.Title = escapeNotificationString(n.Title)
-	n.Message = escapeNotificationString(n.Message)
 	return n
 }
 
 func (n *notification) push() error {
-	content, err := n.template()
-	if err != nil {
-		return err
+	iconURI := ""
+	if n.Icon != "" {
+		iconURI = fileURI(n.Icon)
+	} else if p := materializeDefaultIcon(); p != "" {
+		iconURI = fileURI(p)
 	}
 
-	randBytes := make([]byte, 4)
-	_r.Read(randBytes)
-	tmpFilename := filepath.Join(os.TempDir(), fmt.Sprintf("go-toast-%x.ps1", randBytes))
+	xml := buildToastXML(toastContent{
+		Title:               n.Title,
+		Message:             n.Message,
+		IconURI:             iconURI,
+		ActivationType:      n.ActivationType,
+		ActivationArguments: n.ActivationArguments,
+		Audio:               string(n.Audio),
+		Loop:                n.Loop,
+		Duration:            string(n.Duration),
+		Actions:             n.Actions,
+	})
 
-	if err = os.WriteFile(tmpFilename, content, 0600); err != nil {
-		return err
+	appID := n.AppID
+	if appID == "" {
+		appID = "GO APP"
 	}
-
-	defer func() {
-		_ = os.Remove(tmpFilename)
-	}()
-
-	launch := "(Get-Content -Encoding UTF8 -Path " + tmpFilename + " -Raw) | Invoke-Expression"
-	if len(n._tmpIconFilename) != 0 {
-		launch += "; Start-Sleep -m 50 ; Remove-Item " + n._tmpIconFilename
+	err := pushToastXMLBase64(appID, xml)
+	if n._tmpIconFilename != "" {
+		_ = os.Remove(n._tmpIconFilename)
 	}
-	cmd := exec.Command("PowerShell", "-ExecutionPolicy", "Bypass", launch)
-	fixCmd("PowerShell", cmd)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	return cmd.Run()
+	return err
 }
 
-var (
-	_r    = rand.New(rand.NewSource(time.Now().Unix()))
-	_tpl  *template.Template
-	_once sync.Once
-)
+// _r seeds temp filenames for WithIconRaw.
+var _r = rand.New(rand.NewSource(time.Now().Unix()))
 
-func (n *notification) template() (content []byte, err error) {
-	_once.Do(func() {
-		var tplNotification = `
+// pushToastXMLBase64 shows a toast by decoding Base64 UTF-8 XML in PowerShell.
+//
+// Passing the XML payload as Base64 to an ASCII-only -Command script avoids the
+// script-file encoding pitfalls that garble CJK title/body on Chinese Windows
+// (PowerShell 5.1 mis-decodes a UTF-8 .ps1 written without a BOM).
+func pushToastXMLBase64(appID, xml string) error {
+	if appID == "" {
+		appID = "GO APP"
+	}
+	encoded := base64.StdEncoding.EncodeToString([]byte(xml))
+	script := fmt.Sprintf(`
+$ErrorActionPreference = 'Stop'
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
-
-$APP_ID = '{{if .AppID}}{{.AppID}}{{else}}Windows App{{end}}'
-
-$template = @"
-<toast activationType="{{.ActivationType}}" launch="{{.ActivationArguments}}" duration="{{.Duration}}">
-    <visual>
-        <binding template="ToastGeneric">
-            {{if .Icon}}
-            <image placement="appLogoOverride" src="{{.Icon}}" />
-            {{end}}
-            {{if .Title}}
-            <text><![CDATA[{{.Title}}]]></text>
-            {{end}}
-            {{if .Message}}
-            <text><![CDATA[{{.Message}}]]></text>
-            {{end}}
-        </binding>
-    </visual>
-    {{if ne .Audio "silent"}}
-	<audio src="{{.Audio}}" loop="{{.Loop}}" />
-	{{else}}
-	<audio silent="true" />
-	{{end}}
-    {{if .Actions}}
-    <actions>
-        {{range .Actions}}
-        <action activationType="{{.Type}}" content="{{.Label}}" arguments="{{.Arguments}}" />
-        {{end}}
-    </actions>
-    {{end}}
-</toast>
-"@
-
+$xmlText = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('%s'))
 $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-$xml.LoadXml($template)
-$go_toast = New-Object Windows.UI.Notifications.ToastNotification $xml
-[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($APP_ID).Show($go_toast)
-`
+$xml.LoadXml($xmlText)
+$toast = New-Object Windows.UI.Notifications.ToastNotification $xml
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('%s').Show($toast)
+`, encoded, powershellSingleQuote(appID))
 
-		_tpl, err = template.New("_tpl").Parse(tplNotification)
-	})
+	cmd := exec.Command("powershell.exe",
+		"-NoProfile",
+		"-NonInteractive",
+		"-ExecutionPolicy", "Bypass",
+		"-Command", script,
+	)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, err
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			return fmt.Errorf("windows toast: %w", err)
+		}
+		return fmt.Errorf("windows toast: %w: %s", err, msg)
 	}
-
-	buf := bytes.NewBuffer(nil)
-	err = _tpl.Execute(buf, n)
-	return buf.Bytes(), err
+	return nil
 }
 
 type notification struct {
@@ -306,28 +283,4 @@ type notification struct {
 
 	// How long the notification should show up for (short/long)
 	Duration NotificationDuration
-}
-
-func escapeNotificationString(in string) string {
-	noSlash := strings.ReplaceAll(in, "`", "``")
-	return strings.ReplaceAll(noSlash, "\"", "`\"")
-}
-
-// https://pkg.go.dev/golang.org/x/sys/execabs#Command
-func fixCmd(name string, cmd *exec.Cmd) {
-	if filepath.Base(name) == name && !filepath.IsAbs(cmd.Path) {
-		// exec.Command was called with a bare binary name and
-		// exec.LookPath returned a path which is not absolute.
-		// Set cmd.lookPathErr and clear cmd.Path so that it
-		// cannot be run.
-		lookPathErr := (*error)(unsafe.Pointer(reflect.ValueOf(cmd).Elem().FieldByName("lookPathErr").Addr().Pointer()))
-		if *lookPathErr == nil {
-			*lookPathErr = relError(name, cmd.Path)
-		}
-		cmd.Path = ""
-	}
-}
-
-func relError(file, path string) error {
-	return fmt.Errorf("%s resolves to executable in current directory (.%c%s)", file, filepath.Separator, path)
 }
