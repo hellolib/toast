@@ -2,6 +2,18 @@ package toast
 
 type Audio string
 
+// Action defines an actionable button on a notification.
+//
+// Only protocol-type action buttons are useful, as there's no way to receive
+// feedback from the user's choice. Example:
+//
+//	Action{"protocol", "Open Maps", "bingmaps:?q=sushi"}
+type Action struct {
+	Type      string
+	Label     string
+	Arguments string
+}
+
 type NotificationOption func(*notification)
 
 // WithTitle

@@ -163,22 +163,6 @@ const (
 	LoopingCall10  Audio = "ms-winsoundevent:Notification.Looping.Call10"
 )
 
-// Action
-//
-// Defines an actionable button.
-// See https://msdn.microsoft.com/en-us/windows/uwp/controls-and-patterns/tiles-and-notifications-adaptive-interactive-toasts for more info.
-//
-// Only protocol type action buttons are actually useful, as there's no way of receiving feedback from the
-// user's choice. Examples of protocol type action buttons include: "bingmaps:?q=sushi" to open up Windows 10's
-// maps app with a pre-populated search field set to "sushi".
-//
-//	Action{"protocol", "Open Maps", "bingmaps:?q=sushi"}
-type Action struct {
-	Type      string
-	Label     string
-	Arguments string
-}
-
 var _ notifier = (*notification)(nil)
 
 func newNotification(message string, opts ...NotificationOption) *notification {
